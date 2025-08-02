@@ -5,7 +5,7 @@ import discord
 import asyncio
 import os
 from datetime import datetime
-from discord.ext import tasks
+from discord.ext import tasks, commands
 
 # Configuration
 MIN_PROFIT_THRESHOLD = 10  # Minimum total profit to show opportunities
@@ -113,11 +113,16 @@ def analyze_arbitrage():
     
     return message
 
-class MarketBot(discord.Client):
+class MarketBot(commands.Bot):
     def __init__(self):
         intents = discord.Intents.default()
-        intents.message_content = True  # Needed to read message content
-        super().__init__(intents=intents)
+        # No need for message_content intent with slash commands
+        super().__init__(command_prefix='!', intents=intents)
+        
+    async def setup_hook(self):
+        # Sync slash commands
+        await self.tree.sync()
+        print("Slash commands synced!")
         
     async def on_ready(self):
         print(f'{self.user} has connected to Discord!')
@@ -136,44 +141,6 @@ class MarketBot(discord.Client):
                     print(f'    #{channel.name} (ID: {channel.id})')
         
         self.market_report.start()
-    
-    async def on_message(self, message):
-        # Don't respond to the bot's own messages
-        if message.author == self.user:
-            return
-        
-        # Check if message is in the target channel
-        if message.channel.id != CHANNEL_ID:
-            return
-        
-        # Check for commands
-        content = message.content.lower().strip()
-        
-        if content in ['!market', '!report', '!arbitrage', '!deals']:
-            try:
-                await message.channel.send("🔄 Generating market report...")
-                report = analyze_arbitrage()
-                
-                # Split message if it's too long for Discord (2000 char limit)
-                if len(report) > 2000:
-                    chunks = [report[i:i+2000] for i in range(0, len(report), 2000)]
-                    for chunk in chunks:
-                        await message.channel.send(chunk)
-                else:
-                    await message.channel.send(report)
-            except Exception as e:
-                await message.channel.send(f"❌ Error generating report: {str(e)}")
-        
-        elif content in ['!help', '!commands']:
-            help_text = """
-📊 **Market Bot Commands:**
-• `!market` or `!report` - Get current arbitrage report
-• `!arbitrage` or `!deals` - Same as !market
-• `!help` or `!commands` - Show this help
-
-ℹ️ Automatic reports are sent every hour.
-"""
-            await message.channel.send(help_text)
     
     @tasks.loop(hours=1)
     async def market_report(self):
@@ -198,6 +165,38 @@ class MarketBot(discord.Client):
     async def before_market_report(self):
         await self.wait_until_ready()
 
+# Create bot instance
+bot = MarketBot()
+
+@bot.tree.command(name="market", description="Get current market arbitrage report")
+async def market_command(interaction: discord.Interaction):
+    await interaction.response.defer()
+    
+    try:
+        report = analyze_arbitrage()
+        
+        # Split message if it's too long for Discord (2000 char limit)
+        if len(report) > 2000:
+            chunks = [report[i:i+2000] for i in range(0, len(report), 2000)]
+            await interaction.followup.send(chunks[0])
+            for chunk in chunks[1:]:
+                await interaction.followup.send(chunk)
+        else:
+            await interaction.followup.send(report)
+    except Exception as e:
+        await interaction.followup.send(f"❌ Error generating report: {str(e)}")
+
+@bot.tree.command(name="help", description="Show available bot commands")
+async def help_command(interaction: discord.Interaction):
+    help_text = """
+📊 **Market Bot Commands:**
+• `/market` - Get current arbitrage report
+• `/help` - Show this help
+
+ℹ️ Automatic reports are sent every hour.
+"""
+    await interaction.response.send_message(help_text)
+
 if __name__ == "__main__":
     if not DISCORD_TOKEN:
         print("Please set the DISCORD_TOKEN environment variable")
@@ -207,5 +206,4 @@ if __name__ == "__main__":
         print("Please set the DISCORD_CHANNEL_ID environment variable")
         exit(1)
     
-    bot = MarketBot()
     bot.run(DISCORD_TOKEN)
