@@ -30,28 +30,43 @@ export DISCORD_CHANNEL_ID="your_channel_id"
 4. Copy the generated URL and open it in your browser
 5. Select your server and authorize the bot
 
-## 4. Install Dependencies and Run
+## 4. Install Dependencies
 
 ```bash
 pip3 install -r requirements.txt
+```
 
-# Run the bot
+## Usage
+
+### Terminal Market Report
+
+Get a market report directly in your terminal:
+
+```bash
+python3 generate_report.py
+```
+
+This will fetch current market data and display all arbitrage opportunities with profit >= $10.
+
+### Discord Bot
+
+Run the Discord bot for automated hourly reports and slash commands:
+
+```bash
 python3 discord_bot.py
 ```
 
-## Bot Commands
-
-Users can interact with the bot using these slash commands:
-
+**Bot Commands:**
 - `/market` - Get current arbitrage report
 - `/help` - Show available commands
 
 ## Configuration Options
 
 - `MIN_PROFIT_THRESHOLD`: Minimum profit to show opportunities (default: 10)
-- Reports are sent every hour automatically
+- Reports are sent at :00 and :30 minutes of each hour
 - Bot limits to top 10 opportunities to avoid message length limits
 - Uses slash commands (no privileged intents required)
+- No report sent on startup - waits for next scheduled time
 
 ## Troubleshooting
 
