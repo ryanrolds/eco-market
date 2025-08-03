@@ -48,6 +48,34 @@ python3 generate_report.py
 
 This will fetch current market data and display all arbitrage opportunities with profit >= $10.
 
+### Deal Monitor
+
+Monitor for good deals in real-time with change notifications:
+
+```bash
+python3 monitor_deals.py
+```
+
+This will:
+- Show current good deals (>= $50 profit) on startup
+- Check for new deals every 5 minutes
+- Alert when new deals appear or existing deals disappear
+- Run continuously until stopped with Ctrl+C
+
+### Crafting Profit Analyzer
+
+Analyze profitable crafting opportunities:
+
+```bash
+python3 crafting_analyzer.py
+```
+
+This will:
+- Fetch current market prices and crafting recipes
+- Calculate ingredient costs vs product sale prices
+- Show profitable crafting opportunities with required skills/tables
+- Include ingredient sourcing and product selling information
+
 ### Discord Bot
 
 Run the Discord bot for automated hourly reports and slash commands:

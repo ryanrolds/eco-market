@@ -59,25 +59,17 @@ class MarketBot(commands.Bot):
         except Exception as e:
             print(f"Error sending market report: {e}")
     
-    @tasks.loop(minutes=1)
+    @tasks.loop(minutes=30)  # Check every 30 minutes instead of every minute
     async def schedule_reports(self):
-        """Check every minute if it's time to send a report (on :00 and :30)"""
-        now = datetime.now()
+        """Send report every 30 minutes"""
+        if self.first_run:
+            self.first_run = False
+            print(f"Bot started. First report will be sent in 30 minutes.")
+            return
         
-        # Send report at :00 and :30 minutes
-        if now.minute in [0, 30] and now.second < 10:  # Small window to avoid duplicate sends
-            if self.first_run:
-                self.first_run = False
-                # Calculate next report time
-                if now.minute == 0:
-                    next_time = "30 minutes"
-                else:
-                    next_time = f"{60 - now.minute} minutes" 
-                print(f"Bot started at {now.strftime('%H:%M')}. Next report in {next_time}.")
-                return
-            
-            print(f"Sending scheduled report at {now.strftime('%H:%M')}")
-            await self.send_market_report()
+        now = datetime.now()
+        print(f"Sending scheduled report at {now.strftime('%H:%M')}")
+        await self.send_market_report()
     
     @schedule_reports.before_loop
     async def before_schedule_reports(self):
