@@ -13,8 +13,12 @@
 Set the required environment variables:
 
 ```bash
+# Discord Bot Configuration
 export DISCORD_TOKEN="your_actual_bot_token"
 export DISCORD_CHANNEL_ID="your_channel_id"
+
+# ECO Server Configuration (optional - default shown)
+export ECO_SERVER_URL="http://144.217.255.182:3001"  # Default: http://144.217.255.182:3001
 ```
 
 ### To get Channel ID:
@@ -76,6 +80,20 @@ This will:
 - Show profitable crafting opportunities with required skills/tables
 - Include ingredient sourcing and product selling information
 
+### Profession Profit Analyzer
+
+Analyze profit potential by profession:
+
+```bash
+python3 profession_analyzer.py
+```
+
+This will:
+- Calculate theoretical maximum profit for each profession
+- Rank professions by total market demand value
+- Show top opportunities for each profession
+- Ignore ingredient availability constraints
+
 ### Discord Bot
 
 Run the Discord bot for automated hourly reports and slash commands:
@@ -90,7 +108,13 @@ python3 discord_bot.py
 
 ## Configuration Options
 
-- `MIN_PROFIT_THRESHOLD`: Minimum profit to show opportunities (default: 10)
+### Environment Variables
+- `ECO_SERVER_URL`: Full ECO server URL (default: "http://144.217.255.182:3001")
+- `DISCORD_TOKEN`: Your Discord bot token (required for bot)
+- `DISCORD_CHANNEL_ID`: Discord channel ID for reports (required for bot)
+
+### Script Settings
+- `MIN_PROFIT_THRESHOLD`: Minimum profit to show opportunities (default: varies by script)
 - Reports are sent at :00 and :30 minutes of each hour
 - Bot limits to top 10 opportunities to avoid message length limits
 - Uses slash commands (no privileged intents required)

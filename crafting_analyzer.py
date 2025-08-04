@@ -1,8 +1,9 @@
 import json
 import re
 import requests
+import os
 from datetime import datetime
-from generate_report import fetch_data, clean_store_name, get_item_emoji
+from generate_report import fetch_data, clean_store_name, get_item_emoji, ECO_BASE_URL
 
 # Configuration
 MIN_CRAFTING_PROFIT = 1  # Minimum profit for crafting opportunities
@@ -10,14 +11,20 @@ MIN_INGREDIENT_QUANTITY = 50  # Minimum quantity available for ingredients (be c
 MIN_RECIPE_BATCHES = 5  # Ensure we can make at least 5 batches of the recipe
 DEBUG = True  # Show debug information
 
+# Stores to filter out from buyers (won't sell to these stores)
+EXCLUDED_BUYER_STORES = [
+    "Low Hanging Fruit"
+]
+
 def fetch_recipes():
     """Fetch recipe data from API"""
     try:
-        response = requests.get("http://144.217.255.182:3001/api/v1/plugins/EcoPriceCalculator/recipes", timeout=10)
+        url = f"{ECO_BASE_URL}/api/v1/plugins/EcoPriceCalculator/recipes"
+        response = requests.get(url, timeout=10)
         response.raise_for_status()
         return response.json()
     except Exception as e:
-        print(f"Failed to fetch recipe data: {e}")
+        print(f"Failed to fetch recipe data ({url}): {e}")
         return None
 
 def get_market_prices():
@@ -49,21 +56,32 @@ def get_market_prices():
             else:
                 market_prices[item]['buy_prices'].append({'price': price, 'qty': quantity, 'store': store_name})
     
-    # Calculate best prices for each item
+    # Calculate best prices for each item and keep all buyers
     best_prices = {}
     for item, prices in market_prices.items():
         best_buy_price = None
         best_sell_price = None
+        all_buyers = []
         
         if prices['buy_prices']:
             best_buy_price = min(prices['buy_prices'], key=lambda x: x['price'])
         
         if prices['sell_prices']:
-            best_sell_price = max(prices['sell_prices'], key=lambda x: x['price'])
+            # Filter out excluded stores from buyers
+            filtered_sell_prices = [p for p in prices['sell_prices'] if p['store'] not in EXCLUDED_BUYER_STORES]
+            
+            if filtered_sell_prices:
+                best_sell_price = max(filtered_sell_prices, key=lambda x: x['price'])
+                # Sort all buyers by price (highest first) for profit analysis
+                all_buyers = sorted(filtered_sell_prices, key=lambda x: x['price'], reverse=True)
+            else:
+                best_sell_price = None
+                all_buyers = []
         
         best_prices[item] = {
             'buy': best_buy_price,
-            'sell': best_sell_price
+            'sell': best_sell_price,
+            'all_buyers': all_buyers
         }
     
     return best_prices
@@ -187,22 +205,26 @@ def analyze_crafting_profits():
                 amount_produced = product['Ammount']
                 
                 # Must have actual buyers, not just sellers
-                if product_name in market_prices and market_prices[product_name]['sell']:
-                    unit_price = market_prices[product_name]['sell']['price']
-                    buyer_demand = market_prices[product_name]['sell']['qty']
+                if product_name in market_prices and market_prices[product_name]['all_buyers']:
+                    all_buyers = market_prices[product_name]['all_buyers']
                     
-                    # Ensure there's reasonable demand for the product
-                    if buyer_demand < MIN_RECIPE_BATCHES:
-                        missing_products.append(f"{product_name} (insufficient demand: {buyer_demand})")
+                    # Check if there's any reasonable demand
+                    total_demand = sum(buyer['qty'] for buyer in all_buyers)
+                    if total_demand < MIN_RECIPE_BATCHES:
+                        missing_products.append(f"{product_name} (insufficient demand: {total_demand})")
                     else:
-                        total_revenue += unit_price * amount_produced
+                        # Use best buyer for base revenue calculation
+                        best_buyer = all_buyers[0]  # Already sorted by price desc
+                        total_revenue += best_buyer['price'] * amount_produced
+                        
                         product_details.append({
                             'name': product_name,
                             'amount': amount_produced,
-                            'unit_price': unit_price,
-                            'total_revenue': unit_price * amount_produced,
-                            'store': market_prices[product_name]['sell']['store'],
-                            'buyer_demand': buyer_demand
+                            'best_price': best_buyer['price'],
+                            'best_store': best_buyer['store'],
+                            'best_demand': best_buyer['qty'],
+                            'all_buyers': all_buyers,
+                            'total_demand': total_demand
                         })
                 else:
                     missing_products.append(f"{product_name} (no buyers)")
@@ -214,43 +236,69 @@ def analyze_crafting_profits():
             # Calculate profit
             profit = total_revenue - ingredient_cost
             
-            if profit >= MIN_CRAFTING_PROFIT:
-                margin = (profit / ingredient_cost * 100) if ingredient_cost > 0 else 0
-                craft_time = recipe.get('BaseCraftTime', 1)  # Avoid division by zero
-                profit_per_second = profit / max(craft_time, 0.1)  # Min 0.1s to avoid infinity
+            if profit > 0:
+                # Filter for only mining and masonry skills
+                skill_needs = recipe.get('SkillNeeds', [])
+                required_skills = [skill['Skill'].lower() for skill in skill_needs]
                 
-                crafting_opportunities.append({
-                    'recipe': recipe_name,
-                    'variant': variant_name,
-                    'ingredient_cost': ingredient_cost,
-                    'revenue': total_revenue,
-                    'profit': profit,
-                    'margin': margin,
-                    'profit_per_second': profit_per_second,
-                    'ingredient_details': ingredient_details,
-                    'product_details': product_details,
-                    'crafting_table': recipe.get('CraftingTable', 'Unknown'),
-                    'skill_needs': recipe.get('SkillNeeds', []),
-                    'craft_time': craft_time,
-                    'labor_cost': recipe.get('BaseLaborCost', 0)
-                })
+                # Only show mining and masonry crafts
+                if any(skill in ['mining', 'masonry'] for skill in required_skills) or not skill_needs:
+                    margin = (profit / ingredient_cost * 100) if ingredient_cost > 0 else 0
+                    craft_time = recipe.get('BaseCraftTime', 1)  # Avoid division by zero
+                    profit_per_second = profit / max(craft_time, 0.1)  # Min 0.1s to avoid infinity
+                    
+                    crafting_opportunities.append({
+                        'recipe': recipe_name,
+                        'variant': variant_name,
+                        'ingredient_cost': ingredient_cost,
+                        'revenue': total_revenue,
+                        'profit': profit,
+                        'margin': margin,
+                        'profit_per_second': profit_per_second,
+                        'ingredient_details': ingredient_details,
+                        'product_details': product_details,
+                        'crafting_table': recipe.get('CraftingTable', 'Unknown'),
+                        'skill_needs': skill_needs,
+                        'craft_time': craft_time,
+                        'labor_cost': recipe.get('BaseLaborCost', 0)
+                    })
     
     # Calculate total profit limited by both ingredient availability and product demand
     for opp in crafting_opportunities:
         # Max batches limited by ingredient availability
         max_batches_by_ingredients = min(ing['max_batches'] for ing in opp['ingredient_details'])
         
-        # Max batches limited by product demand (how much buyers want)
-        max_batches_by_demand = float('inf')
+        # Calculate total profit by filling all buyer orders
+        total_profit_all_buyers = 0
+        max_batches_by_demand = 0
+        
         for prod in opp['product_details']:
-            batches_supportable = prod['buyer_demand'] // prod['amount']
-            max_batches_by_demand = min(max_batches_by_demand, batches_supportable)
+            # Sort buyers by price (highest first) and calculate cumulative profit
+            remaining_ingredient_batches = max_batches_by_ingredients
+            cumulative_batches_sold = 0
+            
+            for buyer in prod['all_buyers']:
+                if remaining_ingredient_batches <= 0:
+                    break
+                
+                # Calculate how many batches this buyer can take
+                batches_buyer_wants = buyer['qty'] // prod['amount']
+                batches_to_sell = min(remaining_ingredient_batches, batches_buyer_wants)
+                
+                if batches_to_sell > 0:
+                    # Calculate profit for selling to this buyer
+                    profit_per_unit = buyer['price'] - (opp['ingredient_cost'] / sum(p['amount'] for p in opp['product_details']))
+                    profit_this_buyer = profit_per_unit * prod['amount'] * batches_to_sell
+                    total_profit_all_buyers += profit_this_buyer
+                    
+                    remaining_ingredient_batches -= batches_to_sell
+                    cumulative_batches_sold += batches_to_sell
+            
+            max_batches_by_demand = max(max_batches_by_demand, cumulative_batches_sold)
         
-        # Take the minimum of both constraints
-        max_realistic_batches = min(max_batches_by_ingredients, max_batches_by_demand)
-        
-        opp['total_possible_profit'] = opp['profit'] * max_realistic_batches
-        opp['max_craftable_batches'] = max_realistic_batches
+        # Use the total profit from filling all orders
+        opp['total_possible_profit'] = total_profit_all_buyers
+        opp['max_craftable_batches'] = min(max_batches_by_ingredients, max_batches_by_demand)
         opp['max_batches_by_ingredients'] = max_batches_by_ingredients
         opp['max_batches_by_demand'] = max_batches_by_demand
     
@@ -263,7 +311,10 @@ def format_crafting_report(opportunities):
     """Format crafting opportunities into a readable report"""
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
     message = f"**Crafting Profit Report** - {timestamp}\n"
-    message += f"Found {len(opportunities)} profitable crafting opportunities:\n\n"
+    message += f"Found {len(opportunities)} profitable crafting opportunities:\n"
+    if EXCLUDED_BUYER_STORES:
+        message += f"Excluded buyer stores: {', '.join(EXCLUDED_BUYER_STORES)}\n"
+    message += "\n"
     
     if not opportunities:
         message += "No profitable crafting opportunities found."
@@ -297,12 +348,29 @@ def format_crafting_report(opportunities):
             ing_list.append(f"{ing['amount']}x {ing['name']} (${ing['unit_price']:.2f}, {ing['available_qty']} avail)")
         message += ", ".join(ing_list) + "\n"
         
-        # Show products
-        message += "Products: "
-        prod_list = []
+        # Show products with all buying stores and their actual contribution to total profit
         for prod in opp['product_details']:
-            prod_list.append(f"{prod['amount']}x {prod['name']} (${prod['unit_price']:.2f}, demand: {prod['buyer_demand']})")
-        message += ", ".join(prod_list) + "\n"
+            message += f"Product: {prod['amount']}x {prod['name']} (Total demand: {prod['total_demand']})\n"
+            message += f"  Buyers ({len(prod['all_buyers'])} total, sorted by profit contribution):\n"
+            
+            # Calculate actual profit contribution from each buyer in order
+            remaining_batches = opp['max_batches_by_ingredients']
+            for buyer in prod['all_buyers']:
+                if remaining_batches <= 0:
+                    profit_per_unit = buyer['price'] - (opp['ingredient_cost'] / sum(p['amount'] for p in opp['product_details']))
+                    message += f"    • {buyer['store']}: ${buyer['price']:.2f} (qty:{buyer['qty']}) - 0 batches (no ingredients left) - ${profit_per_unit:.2f}/unit\n"
+                    continue
+                    
+                batches_buyer_wants = buyer['qty'] // prod['amount']
+                batches_to_sell = min(remaining_batches, batches_buyer_wants)
+                
+                profit_per_unit = buyer['price'] - (opp['ingredient_cost'] / sum(p['amount'] for p in opp['product_details']))
+                if batches_to_sell > 0:
+                    actual_profit_contribution = profit_per_unit * prod['amount'] * batches_to_sell
+                    message += f"    • {buyer['store']}: ${buyer['price']:.2f} (qty:{buyer['qty']}) - {batches_to_sell} batches → ${actual_profit_contribution:.2f} profit\n"
+                    remaining_batches -= batches_to_sell
+                else:
+                    message += f"    • {buyer['store']}: ${buyer['price']:.2f} (qty:{buyer['qty']}) - 0 batches (insufficient demand) - ${profit_per_unit:.2f}/unit\n"
         
         # Show constraints
         constraint_info = f"Max craftable: {opp['max_craftable_batches']} batches "
@@ -356,3 +424,65 @@ if __name__ == "__main__":
     
     report = format_crafting_report(opportunities)
     print(report)
+    
+    # Debug output - show which crafts are considered mining and masonry
+    print("\n" + "="*60)
+    print("DEBUG: Mining and Masonry Crafts Analysis")
+    print("="*60)
+    print(f"Excluded buyer stores: {', '.join(EXCLUDED_BUYER_STORES)}")
+    print("="*60)
+    
+    recipe_data = fetch_recipes()
+    if recipe_data:
+        mining_crafts = []
+        masonry_crafts = []
+        no_skill_crafts = []
+        other_skill_crafts = []
+        
+        for recipe in recipe_data.get('Recipes', []):
+            recipe_name = recipe['Key']
+            skill_needs = recipe.get('SkillNeeds', [])
+            
+            if not skill_needs:
+                no_skill_crafts.append(recipe_name)
+            else:
+                required_skills = [skill['Skill'].lower() for skill in skill_needs]
+                if 'mining' in required_skills:
+                    mining_crafts.append((recipe_name, [f"{s['Skill']} Lv.{s['Level']}" for s in skill_needs]))
+                elif 'masonry' in required_skills:
+                    masonry_crafts.append((recipe_name, [f"{s['Skill']} Lv.{s['Level']}" for s in skill_needs]))
+                else:
+                    other_skill_crafts.append((recipe_name, [f"{s['Skill']} Lv.{s['Level']}" for s in skill_needs]))
+        
+        print(f"\nMINING CRAFTS ({len(mining_crafts)}):")
+        for craft, skills in mining_crafts[:10]:  # Show first 10
+            print(f"  • {craft} - Skills: {', '.join(skills)}")
+        if len(mining_crafts) > 10:
+            print(f"  ... and {len(mining_crafts) - 10} more")
+        
+        print(f"\nMASONRY CRAFTS ({len(masonry_crafts)}):")
+        for craft, skills in masonry_crafts[:10]:  # Show first 10
+            print(f"  • {craft} - Skills: {', '.join(skills)}")
+        if len(masonry_crafts) > 10:
+            print(f"  ... and {len(masonry_crafts) - 10} more")
+        
+        print(f"\nNO SKILL CRAFTS ({len(no_skill_crafts)}):")
+        for craft in no_skill_crafts[:10]:  # Show first 10
+            print(f"  • {craft}")
+        if len(no_skill_crafts) > 10:
+            print(f"  ... and {len(no_skill_crafts) - 10} more")
+        
+        print(f"\nOTHER SKILL CRAFTS ({len(other_skill_crafts)}) - NOT SHOWN:")
+        sample_skills = set()
+        for craft, skills in other_skill_crafts:
+            for skill in skills:
+                sample_skills.add(skill.split(' ')[0])  # Get skill name without level
+        print(f"  Sample skills: {', '.join(sorted(list(sample_skills))[:10])}")
+        
+        total_filtered = len(mining_crafts) + len(masonry_crafts) + len(no_skill_crafts)
+        print(f"\nFILTER SUMMARY:")
+        print(f"  Total recipes: {len(recipe_data.get('Recipes', []))}")
+        print(f"  Recipes shown (mining/masonry/no-skill): {total_filtered}")
+        print(f"  Recipes filtered out: {len(other_skill_crafts)}")
+    else:
+        print("Could not fetch recipe data for debug analysis")

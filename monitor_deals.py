@@ -3,11 +3,16 @@ import re
 import requests
 import time
 from datetime import datetime
-from generate_report import fetch_data, clean_store_name, get_item_emoji
+from generate_report import fetch_data, clean_store_name, get_item_emoji, ECO_BASE_URL
 
 # Configuration
 GOOD_DEAL_THRESHOLD = 50  # Minimum profit for "good deals"
 CHECK_INTERVAL = 300  # 5 minutes in seconds
+
+# Stores to filter out from buyers (won't sell to these stores)
+EXCLUDED_BUYER_STORES = [
+    "Low Hanging Fruit"
+]
 
 class DealMonitor:
     def __init__(self):
@@ -47,7 +52,9 @@ class DealMonitor:
                     items[item] = {'sellers': [], 'buyers': []}
                 
                 if buying:
-                    items[item]['buyers'].append({'store': store_name, 'price': price, 'qty': quantity})
+                    # Filter out excluded stores from buyers
+                    if store_name not in EXCLUDED_BUYER_STORES:
+                        items[item]['buyers'].append({'store': store_name, 'price': price, 'qty': quantity})
                 else:
                     items[item]['sellers'].append({'store': store_name, 'price': price, 'qty': quantity})
 
@@ -136,6 +143,8 @@ class DealMonitor:
             self.startup = False
             if current_deals:
                 print(f"[{timestamp}] 📊 Current good deals (${GOOD_DEAL_THRESHOLD}+ profit):")
+                if EXCLUDED_BUYER_STORES:
+                    print(f"Excluded buyer stores: {', '.join(EXCLUDED_BUYER_STORES)}")
                 print("=" * 60)
                 for i, deal in enumerate(current_deals, 1):
                     deal_id = self.create_deal_id(deal)
@@ -196,6 +205,8 @@ class DealMonitor:
         """Main monitoring loop"""
         print(f"🔍 Deal Monitor Started - Watching for ${GOOD_DEAL_THRESHOLD}+ profit opportunities")
         print(f"📡 Checking every {CHECK_INTERVAL//60} minutes")
+        if EXCLUDED_BUYER_STORES:
+            print(f"Excluded buyer stores: {', '.join(EXCLUDED_BUYER_STORES)}")
         print("=" * 60)
         
         try:

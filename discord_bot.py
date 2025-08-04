@@ -3,7 +3,7 @@ import asyncio
 import os
 from datetime import datetime
 from discord.ext import tasks, commands
-from generate_report import analyze_arbitrage
+from generate_report import analyze_arbitrage, EXCLUDED_BUYER_STORES, ECO_BASE_URL
 
 # Configuration
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
@@ -98,11 +98,13 @@ async def market_command(interaction: discord.Interaction):
 
 @bot.tree.command(name="help", description="Show available bot commands")
 async def help_command(interaction: discord.Interaction):
-    help_text = """**Market Bot Commands:**
+    excluded_stores = f"\nExcluded buyer stores: {', '.join(EXCLUDED_BUYER_STORES)}" if EXCLUDED_BUYER_STORES else ""
+    help_text = f"""**Market Bot Commands:**
 • `/market` - Get current arbitrage report
 • `/help` - Show this help
 
-Automatic reports sent at :00 and :30 minutes."""
+Server: {ECO_BASE_URL}
+Automatic reports sent at :00 and :30 minutes.{excluded_stores}"""
     await interaction.response.send_message(help_text)
 
 if __name__ == "__main__":
