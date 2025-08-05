@@ -3,7 +3,7 @@ import asyncio
 import os
 from datetime import datetime
 from discord.ext import tasks, commands
-from generate_report import analyze_arbitrage, EXCLUDED_BUYER_STORES, ECO_BASE_URL
+from generate_report import analyze_arbitrage, EXCLUDED_BUYER_STORES, ECO_BASE_URL, DEFAULT_CURRENCY_FILTER
 
 # Configuration
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
@@ -45,7 +45,7 @@ class MarketBot(commands.Bot):
         try:
             channel = self.get_channel(CHANNEL_ID)
             if channel:
-                message = analyze_arbitrage()
+                message = analyze_arbitrage(DEFAULT_CURRENCY_FILTER)
                 
                 # Split message if it's too long for Discord (2000 char limit)
                 if len(message) > 2000:
@@ -83,7 +83,7 @@ async def market_command(interaction: discord.Interaction):
     await interaction.response.defer()
     
     try:
-        report = analyze_arbitrage()
+        report = analyze_arbitrage(DEFAULT_CURRENCY_FILTER)
         
         # Split message if it's too long for Discord (2000 char limit)
         if len(report) > 2000:
@@ -99,12 +99,13 @@ async def market_command(interaction: discord.Interaction):
 @bot.tree.command(name="help", description="Show available bot commands")
 async def help_command(interaction: discord.Interaction):
     excluded_stores = f"\nExcluded buyer stores: {', '.join(EXCLUDED_BUYER_STORES)}" if EXCLUDED_BUYER_STORES else ""
+    currency_filter = f"\nCurrency filter: {', '.join(DEFAULT_CURRENCY_FILTER)}" if DEFAULT_CURRENCY_FILTER else ""
     help_text = f"""**Market Bot Commands:**
 • `/market` - Get current arbitrage report
 • `/help` - Show this help
 
 Server: {ECO_BASE_URL}
-Automatic reports sent at :00 and :30 minutes.{excluded_stores}"""
+Automatic reports sent at :00 and :30 minutes.{excluded_stores}{currency_filter}"""
     await interaction.response.send_message(help_text)
 
 if __name__ == "__main__":

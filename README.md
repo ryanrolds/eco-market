@@ -14,11 +14,14 @@ Set the required environment variables:
 
 ```bash
 # Discord Bot Configuration
-export DISCORD_TOKEN="your_actual_bot_token"
+export DISCORD_TOKEN="asdfasdfasdf"
 export DISCORD_CHANNEL_ID="your_channel_id"
 
 # ECO Server Configuration (optional - default shown)
 export ECO_SERVER_URL="http://144.217.255.182:3001"  # Default: http://144.217.255.182:3001
+
+# Currency Filter (optional - filters stores by currency)
+export CURRENCY_FILTER="Gold Coins,USD"  # Only show stores using these currencies
 ```
 
 ### To get Channel ID:
@@ -50,7 +53,12 @@ Get a market report directly in your terminal:
 python3 generate_report.py
 ```
 
-This will fetch current market data and display all arbitrage opportunities with profit >= $10.
+This will fetch current market data and display all arbitrage opportunities with profit >= $5.
+
+You can also filter by specific currencies using command line arguments:
+```bash
+python3 generate_report.py "Gold Coins" "USD"
+```
 
 ### Deal Monitor
 
@@ -109,9 +117,22 @@ python3 discord_bot.py
 ## Configuration Options
 
 ### Environment Variables
-- `ECO_SERVER_URL`: Full ECO server URL (default: "http://144.217.255.182:3001")
-- `DISCORD_TOKEN`: Your Discord bot token (required for bot)
-- `DISCORD_CHANNEL_ID`: Discord channel ID for reports (required for bot)
+
+#### Required for Discord Bot
+- `DISCORD_TOKEN`: Your Discord bot token (required for discord_bot.py)
+- `DISCORD_CHANNEL_ID`: Discord channel ID for automated reports (required for discord_bot.py)
+
+#### Optional Configuration
+- `ECO_SERVER_URL`: Full ECO server URL including protocol and port
+  - Default: `"http://144.217.255.182:3001"`
+  - Used by: All scripts (generate_report.py, crafting_analyzer.py, profession_analyzer.py, monitor_deals.py, discord_bot.py)
+  - Example: `"http://your-eco-server.com:3001"`
+
+- `CURRENCY_FILTER`: Comma-separated list of currency names to filter by
+  - Default: `None` (includes all currencies)
+  - Used by: generate_report.py, discord_bot.py
+  - Example: `"USD,EUR,Gold Coins"` (only show stores using these currencies)
+  - Note: Command line arguments override this environment variable
 
 ### Script Settings
 - `MIN_PROFIT_THRESHOLD`: Minimum profit to show opportunities (default: varies by script)

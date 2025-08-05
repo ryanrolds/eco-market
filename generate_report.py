@@ -11,6 +11,10 @@ MIN_PROFIT_THRESHOLD = 5  # Minimum total profit to show opportunities
 ECO_SERVER_URL = os.getenv("ECO_SERVER_URL", "http://144.217.255.182:3001")
 ECO_BASE_URL = ECO_SERVER_URL.rstrip('/')
 
+# Currency filter from environment variable (comma-separated list)
+CURRENCY_FILTER_ENV = os.getenv("CURRENCY_FILTER")
+DEFAULT_CURRENCY_FILTER = CURRENCY_FILTER_ENV.split(',') if CURRENCY_FILTER_ENV else None
+
 # Stores to filter out from buyers (won't sell to these stores)
 EXCLUDED_BUYER_STORES = [
     "Low Hanging Fruit"
@@ -176,13 +180,21 @@ def get_item_emoji(item_name):
     # Default for unmatched items
     return '📦'
 
-def analyze_arbitrage():
-    """Analyze arbitrage opportunities and return formatted message"""
+def analyze_arbitrage(currency_filter=None):
+    """Analyze arbitrage opportunities and return formatted message
+    
+    Args:
+        currency_filter: List of currency names to filter by. If None, includes all currencies.
+    """
     data = fetch_data()
     if not data:
         return "Failed to fetch market data"
     
     stores = data['Stores']
+    
+    # Filter stores by currency if specified
+    if currency_filter:
+        stores = [store for store in stores if store.get('CurrencyName', 'Unknown') in currency_filter]
     
     # Build store info and price comparison
     store_info = {}
@@ -190,7 +202,7 @@ def analyze_arbitrage():
     for store in stores:
         store_name = clean_store_name(store['Name'])
         store_info[store_name] = {
-            'balance': store.get('Balance', 0),
+            'balance': float(store.get('Balance', 0)),
             'currency': store.get('CurrencyName', 'Unknown')
         }
         
@@ -276,6 +288,8 @@ def analyze_arbitrage():
     # Format message
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
     message = f"**Market Report** - {timestamp}\n"
+    if currency_filter:
+        message += f"Filtered by currencies: {', '.join(currency_filter)}\n"
     message += f"Found {len(high_profit_arbitrage)} opportunities with >=${MIN_PROFIT_THRESHOLD} profit:\n"
     if EXCLUDED_BUYER_STORES:
         message += f"Excluded buyer stores: {', '.join(EXCLUDED_BUYER_STORES)}\n"
@@ -323,5 +337,15 @@ def analyze_arbitrage():
     return message
 
 if __name__ == "__main__":
-    report = analyze_arbitrage()
+    import sys
+    
+    # Check for currency filter arguments or use environment variable
+    currency_filter = DEFAULT_CURRENCY_FILTER
+    if len(sys.argv) > 1:
+        currency_filter = sys.argv[1:]
+        print(f"Filtering by currencies (command line): {currency_filter}")
+    elif currency_filter:
+        print(f"Filtering by currencies (env var): {currency_filter}")
+    
+    report = analyze_arbitrage(currency_filter)
     print(report)
