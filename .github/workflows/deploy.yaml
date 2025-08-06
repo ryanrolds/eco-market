@@ -50,7 +50,7 @@ jobs:
             -R ryanrolds/infrastructure \
             -r main \
             -F chart=eco-market \
-            -F values_file=./charts/eco-market/values.yaml \
+            -F values_file=./values.yaml \
             -F tag_path=image.tag \
             -F tag=${{ github.sha }} \
             -F branch=main
