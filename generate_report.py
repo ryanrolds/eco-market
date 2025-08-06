@@ -234,7 +234,12 @@ def analyze_arbitrage(currency_filter=None):
                 min_sell = min(sellers_with_stock, key=lambda x: x['price'])
                 max_buy = max(buyers_with_demand, key=lambda x: x['price'])
                 
-                if max_buy['price'] > min_sell['price'] and min_sell['price'] < 999999:
+                # Get currencies for both stores
+                buy_store_currency = store_info[min_sell['store']]['currency']
+                sell_store_currency = store_info[max_buy['store']]['currency']
+                
+                # Only consider arbitrage if both stores use the same currency
+                if buy_store_currency == sell_store_currency and max_buy['price'] > min_sell['price'] and min_sell['price'] < 999999:
                     profit = max_buy['price'] - min_sell['price']
                     if min_sell['price'] > 0:
                         margin = (profit / min_sell['price']) * 100
@@ -278,7 +283,9 @@ def analyze_arbitrage(currency_filter=None):
                             'investment_required': investment_required,
                             'low_liquidity_warning': low_liquidity_warning,
                             'buyer_insufficient_funds': buyer_insufficient_funds,
-                            'max_qty_buyer_can_afford': max_qty_buyer_can_afford
+                            'max_qty_buyer_can_afford': max_qty_buyer_can_afford,
+                            'buy_store_currency': buy_store_currency,
+                            'sell_store_currency': sell_store_currency
                         })
 
     # Filter for high profit opportunities
@@ -318,7 +325,7 @@ def analyze_arbitrage(currency_filter=None):
         
         message += f"**{i}. {item_emoji} {opp['item']}** ({profit_highlight}){warning_text}\n"
         message += f"${opp['buy_price']:.2f} → ${opp['sell_price']:.2f} ({opp['margin']:.0f}% margin)\n"
-        message += f"Currency: {opp['currency']}\n"
+        message += f"Currency: {opp['buy_store_currency']} → {opp['sell_store_currency']}\n"
         message += f"Buy: {opp['buy_store']} (${opp['buy_store_balance']:,.0f}) qty:{opp['buy_qty']}\n"
         message += f"Sell: {opp['sell_store']} (${opp['sell_store_balance']:,.0f}) qty:{opp['sell_qty']}\n"
         message += f"Max trade: {opp['max_trade_qty']} units"
