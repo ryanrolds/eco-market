@@ -318,6 +318,7 @@ def analyze_arbitrage(currency_filter=None):
         
         message += f"**{i}. {item_emoji} {opp['item']}** ({profit_highlight}){warning_text}\n"
         message += f"${opp['buy_price']:.2f} → ${opp['sell_price']:.2f} ({opp['margin']:.0f}% margin)\n"
+        message += f"Currency: {opp['currency']}\n"
         message += f"Buy: {opp['buy_store']} (${opp['buy_store_balance']:,.0f}) qty:{opp['buy_qty']}\n"
         message += f"Sell: {opp['sell_store']} (${opp['sell_store_balance']:,.0f}) qty:{opp['sell_qty']}\n"
         message += f"Max trade: {opp['max_trade_qty']} units"
