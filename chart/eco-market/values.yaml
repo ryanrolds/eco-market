@@ -2,7 +2,7 @@
 replicaCount: 1
 
 image:
-  repository: eco-market
+  repository: docker.pedanticorderliness.com/eco-market
   pullPolicy: IfNotPresent
   tag: "latest"
 
