@@ -1,0 +1,15 @@
+apiVersion: v2
+name: eco-market
+description: ECO Market Discord Bot for analyzing market opportunities
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+keywords:
+  - discord
+  - bot
+  - market
+  - eco
+home: https://github.com/yourusername/eco-market
+maintainers:
+  - name: Ryan
+    email: your-email@example.com

@@ -5,7 +5,7 @@ import os
 from datetime import datetime
 
 # Configuration
-MIN_PROFIT_THRESHOLD = 5  # Minimum total profit to show opportunities
+MIN_PROFIT_THRESHOLD = 50  # Minimum total profit to show opportunities
 
 # Server configuration from environment variables
 ECO_SERVER_URL = os.getenv("ECO_SERVER_URL", "http://144.217.255.182:3001")
