@@ -231,62 +231,89 @@ def analyze_arbitrage(currency_filter=None):
             buyers_with_demand = [b for b in data['buyers'] if b['qty'] > 0]
             
             if sellers_with_stock and buyers_with_demand:
-                min_sell = min(sellers_with_stock, key=lambda x: x['price'])
-                max_buy = max(buyers_with_demand, key=lambda x: x['price'])
+                # Group sellers and buyers by currency
+                currency_groups = {}
                 
-                # Get currencies for both stores
-                buy_store_currency = store_info[min_sell['store']]['currency']
-                sell_store_currency = store_info[max_buy['store']]['currency']
+                # Group sellers by currency
+                for seller in sellers_with_stock:
+                    currency = store_info[seller['store']]['currency']
+                    if currency not in currency_groups:
+                        currency_groups[currency] = {'sellers': [], 'buyers': []}
+                    currency_groups[currency]['sellers'].append(seller)
                 
-                # Only consider arbitrage if both stores use the same currency
-                if buy_store_currency == sell_store_currency and max_buy['price'] > min_sell['price'] and min_sell['price'] < 999999:
-                    profit = max_buy['price'] - min_sell['price']
-                    if min_sell['price'] > 0:
-                        margin = (profit / min_sell['price']) * 100
-                    else:
-                        margin = 0
-                    if profit > 0.1:
-                        # Calculate max trade quantity considering all constraints
-                        max_qty_by_stock = min_sell['qty']
-                        max_qty_by_demand = max_buy['qty']
+                # Group buyers by currency
+                for buyer in buyers_with_demand:
+                    currency = store_info[buyer['store']]['currency']
+                    if currency not in currency_groups:
+                        currency_groups[currency] = {'sellers': [], 'buyers': []}
+                    currency_groups[currency]['buyers'].append(buyer)
+                
+                # Find best arbitrage within each currency group
+                for currency, currency_data in currency_groups.items():
+                    if currency_data['sellers'] and currency_data['buyers']:
+                        # Test all seller-buyer combinations within this currency
+                        best_opportunity = None
+                        best_total_profit = 0
                         
-                        # Calculate max quantity the buyer can afford
-                        sell_store_balance = store_info[max_buy['store']]['balance']
-                        max_qty_buyer_can_afford = sell_store_balance // max_buy['price'] if max_buy['price'] > 0 else 0
+                        for seller in currency_data['sellers']:
+                            for buyer in currency_data['buyers']:
+                                if buyer['price'] > seller['price'] and seller['price'] < 999999:
+                                    profit = buyer['price'] - seller['price']
+                                    if profit > 0.1:
+                                        # Calculate max trade quantity considering all constraints
+                                        max_qty_by_stock = seller['qty']
+                                        max_qty_by_demand = buyer['qty']
+                                        
+                                        # Calculate max quantity the buyer can afford
+                                        sell_store_balance = store_info[buyer['store']]['balance']
+                                        max_qty_buyer_can_afford = sell_store_balance // buyer['price'] if buyer['price'] > 0 else 0
+                                        
+                                        # Take minimum of all constraints
+                                        max_trade_qty = min(max_qty_by_stock, max_qty_by_demand, max_qty_buyer_can_afford)
+                                        total_profit = profit * max_trade_qty
+                                        
+                                        # Keep the opportunity with the highest total profit
+                                        if total_profit > best_total_profit:
+                                            best_total_profit = total_profit
+                                            
+                                            if seller['price'] > 0:
+                                                margin = (profit / seller['price']) * 100
+                                            else:
+                                                margin = 0
+                                            
+                                            # Calculate investment required and check liquidity risk
+                                            investment_required = seller['price'] * max_trade_qty
+                                            buy_store_balance = store_info[seller['store']]['balance']
+                                            low_liquidity_warning = buy_store_balance - investment_required < 50
+                                            
+                                            # Check if buyer has insufficient funds
+                                            buyer_insufficient_funds = max_qty_buyer_can_afford < min(max_qty_by_stock, max_qty_by_demand)
+                                            
+                                            best_opportunity = {
+                                                'item': item,
+                                                'buy_store': seller['store'],
+                                                'buy_price': seller['price'],
+                                                'buy_qty': seller['qty'],
+                                                'sell_store': buyer['store'],
+                                                'sell_price': buyer['price'],
+                                                'sell_qty': buyer['qty'],
+                                                'profit': profit,
+                                                'margin': margin,
+                                                'max_trade_qty': max_trade_qty,
+                                                'total_profit': total_profit,
+                                                'buy_store_balance': buy_store_balance,
+                                                'sell_store_balance': sell_store_balance,
+                                                'investment_required': investment_required,
+                                                'low_liquidity_warning': low_liquidity_warning,
+                                                'buyer_insufficient_funds': buyer_insufficient_funds,
+                                                'max_qty_buyer_can_afford': max_qty_buyer_can_afford,
+                                                'buy_store_currency': currency,
+                                                'sell_store_currency': currency
+                                            }
                         
-                        # Take minimum of all constraints
-                        max_trade_qty = min(max_qty_by_stock, max_qty_by_demand, max_qty_buyer_can_afford)
-                        total_profit = profit * max_trade_qty
-                        
-                        # Calculate investment required and check liquidity risk
-                        investment_required = min_sell['price'] * max_trade_qty
-                        buy_store_balance = store_info[min_sell['store']]['balance']
-                        low_liquidity_warning = buy_store_balance - investment_required < 50
-                        
-                        # Check if buyer has insufficient funds
-                        buyer_insufficient_funds = max_qty_buyer_can_afford < min(max_qty_by_stock, max_qty_by_demand)
-                        
-                        arbitrage.append({
-                            'item': item,
-                            'buy_store': min_sell['store'],
-                            'buy_price': min_sell['price'],
-                            'buy_qty': min_sell['qty'],
-                            'sell_store': max_buy['store'],
-                            'sell_price': max_buy['price'],
-                            'sell_qty': max_buy['qty'],
-                            'profit': profit,
-                            'margin': margin,
-                            'max_trade_qty': max_trade_qty,
-                            'total_profit': total_profit,
-                            'buy_store_balance': buy_store_balance,
-                            'sell_store_balance': sell_store_balance,
-                            'investment_required': investment_required,
-                            'low_liquidity_warning': low_liquidity_warning,
-                            'buyer_insufficient_funds': buyer_insufficient_funds,
-                            'max_qty_buyer_can_afford': max_qty_buyer_can_afford,
-                            'buy_store_currency': buy_store_currency,
-                            'sell_store_currency': sell_store_currency
-                        })
+                        # Add the best opportunity for this currency group if it exists
+                        if best_opportunity:
+                            arbitrage.append(best_opportunity)
 
     # Filter for high profit opportunities
     high_profit_arbitrage = [opp for opp in arbitrage if opp['total_profit'] >= MIN_PROFIT_THRESHOLD]
