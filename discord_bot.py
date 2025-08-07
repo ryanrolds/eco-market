@@ -29,6 +29,19 @@ class MarketBot(commands.Bot):
         channel = self.get_channel(CHANNEL_ID)
         if channel:
             print(f'Found target channel: {channel.name} in {channel.guild.name}')
+            
+            # Send startup message to the channel
+            try:
+                startup_message = f"🤖 **Market Bot Started**\nBot is now online and ready!\nServer: {ECO_BASE_URL}\nNext report in 30 minutes."
+                if DEFAULT_CURRENCY_FILTER:
+                    startup_message += f"\nCurrency filter: {', '.join(DEFAULT_CURRENCY_FILTER)}"
+                if EXCLUDED_BUYER_STORES:
+                    startup_message += f"\nExcluded buyer stores: {', '.join(EXCLUDED_BUYER_STORES)}"
+                
+                await channel.send(startup_message)
+                print("Startup message sent successfully!")
+            except Exception as e:
+                print(f"Error sending startup message: {e}")
         else:
             print(f'Could not find channel with ID {CHANNEL_ID}')
             print('Available channels:')
