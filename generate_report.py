@@ -259,57 +259,56 @@ def analyze_arbitrage(currency_filter=None):
                             for buyer in currency_data['buyers']:
                                 if buyer['price'] > seller['price'] and seller['price'] < 999999:
                                     profit = buyer['price'] - seller['price']
-                                    if profit > 0.1:
-                                        # Calculate max trade quantity considering all constraints
-                                        max_qty_by_stock = seller['qty']
-                                        max_qty_by_demand = buyer['qty']
+                                    # Calculate max trade quantity considering all constraints
+                                    max_qty_by_stock = seller['qty']
+                                    max_qty_by_demand = buyer['qty']
+                                    
+                                    # Calculate max quantity the buyer can afford
+                                    sell_store_balance = store_info[buyer['store']]['balance']
+                                    max_qty_buyer_can_afford = sell_store_balance // buyer['price'] if buyer['price'] > 0 else 0
+                                    
+                                    # Take minimum of all constraints
+                                    max_trade_qty = min(max_qty_by_stock, max_qty_by_demand, max_qty_buyer_can_afford)
+                                    total_profit = profit * max_trade_qty
+                                    
+                                    # Keep the opportunity with the highest total profit
+                                    if total_profit > best_total_profit:
+                                        best_total_profit = total_profit
                                         
-                                        # Calculate max quantity the buyer can afford
-                                        sell_store_balance = store_info[buyer['store']]['balance']
-                                        max_qty_buyer_can_afford = sell_store_balance // buyer['price'] if buyer['price'] > 0 else 0
+                                        if seller['price'] > 0:
+                                            margin = (profit / seller['price']) * 100
+                                        else:
+                                            margin = 0
                                         
-                                        # Take minimum of all constraints
-                                        max_trade_qty = min(max_qty_by_stock, max_qty_by_demand, max_qty_buyer_can_afford)
-                                        total_profit = profit * max_trade_qty
+                                        # Calculate investment required and check liquidity risk
+                                        investment_required = seller['price'] * max_trade_qty
+                                        buy_store_balance = store_info[seller['store']]['balance']
+                                        low_liquidity_warning = buy_store_balance - investment_required < 50
                                         
-                                        # Keep the opportunity with the highest total profit
-                                        if total_profit > best_total_profit:
-                                            best_total_profit = total_profit
-                                            
-                                            if seller['price'] > 0:
-                                                margin = (profit / seller['price']) * 100
-                                            else:
-                                                margin = 0
-                                            
-                                            # Calculate investment required and check liquidity risk
-                                            investment_required = seller['price'] * max_trade_qty
-                                            buy_store_balance = store_info[seller['store']]['balance']
-                                            low_liquidity_warning = buy_store_balance - investment_required < 50
-                                            
-                                            # Check if buyer has insufficient funds
-                                            buyer_insufficient_funds = max_qty_buyer_can_afford < min(max_qty_by_stock, max_qty_by_demand)
-                                            
-                                            best_opportunity = {
-                                                'item': item,
-                                                'buy_store': seller['store'],
-                                                'buy_price': seller['price'],
-                                                'buy_qty': seller['qty'],
-                                                'sell_store': buyer['store'],
-                                                'sell_price': buyer['price'],
-                                                'sell_qty': buyer['qty'],
-                                                'profit': profit,
-                                                'margin': margin,
-                                                'max_trade_qty': max_trade_qty,
-                                                'total_profit': total_profit,
-                                                'buy_store_balance': buy_store_balance,
-                                                'sell_store_balance': sell_store_balance,
-                                                'investment_required': investment_required,
-                                                'low_liquidity_warning': low_liquidity_warning,
-                                                'buyer_insufficient_funds': buyer_insufficient_funds,
-                                                'max_qty_buyer_can_afford': max_qty_buyer_can_afford,
-                                                'buy_store_currency': currency,
-                                                'sell_store_currency': currency
-                                            }
+                                        # Check if buyer has insufficient funds
+                                        buyer_insufficient_funds = max_qty_buyer_can_afford < min(max_qty_by_stock, max_qty_by_demand)
+                                        
+                                        best_opportunity = {
+                                            'item': item,
+                                            'buy_store': seller['store'],
+                                            'buy_price': seller['price'],
+                                            'buy_qty': seller['qty'],
+                                            'sell_store': buyer['store'],
+                                            'sell_price': buyer['price'],
+                                            'sell_qty': buyer['qty'],
+                                            'profit': profit,
+                                            'margin': margin,
+                                            'max_trade_qty': max_trade_qty,
+                                            'total_profit': total_profit,
+                                            'buy_store_balance': buy_store_balance,
+                                            'sell_store_balance': sell_store_balance,
+                                            'investment_required': investment_required,
+                                            'low_liquidity_warning': low_liquidity_warning,
+                                            'buyer_insufficient_funds': buyer_insufficient_funds,
+                                            'max_qty_buyer_can_afford': max_qty_buyer_can_afford,
+                                            'buy_store_currency': currency,
+                                            'sell_store_currency': currency
+                                        }
                         
                         # Add the best opportunity for this currency group if it exists
                         if best_opportunity:
